@@ -19,6 +19,7 @@ class Limiter:
     requests: int
     timeunit: str
     exp_time: int
+    excluded_ips: list[str] = []
 
     def __init__(self, requests_slash_timeunit):
         requests, timeunits = requests_slash_timeunit.split("/")
@@ -36,6 +37,12 @@ class Limiter:
 
         identifier = self.get_identifier(request)
         requested_by_client = int(self.redis.get(identifier) or 0)
+        
+        request_ip = request.client.host
+        if request_ip in self.excluded_ips:
+            if self.debug:
+                logging.info(f"IP {request_ip} is excluded from rate limiting.")
+            return
 
         if requested_by_client >= self.requests:
             raise HTTPException(status_code=429)
@@ -56,11 +63,13 @@ class Limiter:
         cls, 
         redis_instance: redis, 
         debug: Optional[bool] = False,
-        ignore_limiter: Optional[bool] = False
+        ignore_limiter: Optional[bool] = False,
+        excluded_ips: Optional[list[str]] = None
     ):
         cls.debug = debug
         cls.redis = redis_instance
         cls.ignore_limiter = ignore_limiter
+        cls.excluded_ips = excluded_ips
 
     @staticmethod
     def get_identifier(request: Request) -> str:
